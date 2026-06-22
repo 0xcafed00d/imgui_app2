@@ -78,20 +78,22 @@ target_include_directories(
 	${SDL3_INCLUDE_DIR}
 )
 
-
 # ImGui example application
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
-add_executable(
-	${PROJECT_NAME}
-	src/imgui_app.h
-	src/imgui_app.cpp
-	src/sample_app.cpp
-)
+    add_executable(
+        ${PROJECT_NAME}
+        src/imgui_app.h
+        src/imgui_app.cpp
+        src/sample_app.cpp
+    )
 
-target_link_libraries(
-	${PROJECT_NAME} 
-	lib_imgui
-#	SDL3::SDL3main
-	SDL3::SDL3-static
-)
+    target_link_libraries(
+        ${PROJECT_NAME} 
+        lib_imgui
+    #	SDL3::SDL3main
+        SDL3::SDL3-static
+    )
+
+endif()
 
