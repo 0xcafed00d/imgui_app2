@@ -1,7 +1,32 @@
 #include "imgui_app.h"
 #include "imgui_raylib.h"
 
+#include <algorithm>
 #include <cmath>
+
+namespace {
+	void ShowTextureCoordinateTooltip(ImVec2 texture_size) {
+		if (!ImGui::IsItemHovered()) {
+			return;
+		}
+
+		const ImVec2 item_min = ImGui::GetItemRectMin();
+		const ImVec2 item_size = ImGui::GetItemRectSize();
+		if (item_size.x <= 0.0f || item_size.y <= 0.0f || texture_size.x <= 0.0f || texture_size.y <= 0.0f) {
+			return;
+		}
+
+		const ImVec2 mouse = ImGui::GetMousePos();
+		const float u = std::clamp((mouse.x - item_min.x) / item_size.x, 0.0f, 1.0f);
+		const float v = std::clamp((mouse.y - item_min.y) / item_size.y, 0.0f, 1.0f);
+		const float texture_x = u * texture_size.x;
+		const float texture_y = v * texture_size.y;
+		const int pixel_x = std::clamp(static_cast<int>(std::floor(texture_x)), 0, std::max(0, static_cast<int>(texture_size.x) - 1));
+		const int pixel_y = std::clamp(static_cast<int>(std::floor(texture_y)), 0, std::max(0, static_cast<int>(texture_size.y) - 1));
+
+		ImGui::SetTooltip("texture: %d, %d\nuv: %.3f, %.3f", pixel_x, pixel_y, u, v);
+	}
+}  // namespace
 
 int main(int argc, char* argv[]) {
 	(void)argc;
@@ -26,7 +51,9 @@ int main(int argc, char* argv[]) {
 			DrawCircleLines(320, 180, 120.0f, Fade(ORANGE, 0.75f));
 			DrawRectangleLines(0, 0, static_cast<int>(size.x), static_cast<int>(size.y), Fade(RAYWHITE, 0.45f));
 
+			const ImVec2 texture_size = ImGuiRaylib::GetCurrentSize();
 			ImGuiRaylib::EndRaylib();
+			ShowTextureCoordinateTooltip(texture_size);
 		}
 
 		if (ImGui::Button("exit")) {
