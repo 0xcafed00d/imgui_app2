@@ -20,6 +20,7 @@ namespace ImGuiApp {
 		constexpr unsigned int GL_TEXTURE_MAG_FILTER_VALUE = 0x2800;
 		constexpr unsigned int GL_TEXTURE_WRAP_S_VALUE = 0x2802;
 		constexpr unsigned int GL_TEXTURE_WRAP_T_VALUE = 0x2803;
+		constexpr unsigned int GL_NEAREST_VALUE = 0x2600;
 		constexpr unsigned int GL_LINEAR_VALUE = 0x2601;
 		constexpr unsigned int GL_CLAMP_TO_EDGE_VALUE = 0x812F;
 		constexpr unsigned int GL_RGBA_VALUE = 0x1908;
@@ -51,11 +52,34 @@ namespace ImGuiApp {
 		};
 
 		static OpenGLTextureProcs gl_texture_procs{};
+
+		SDL_ScaleMode to_sdl_scale_mode(TextureFilter filter) {
+			switch (filter) {
+				case TextureFilter::Nearest:
+					return SDL_SCALEMODE_NEAREST;
+				case TextureFilter::Linear:
+					return SDL_SCALEMODE_LINEAR;
+			}
+
+			return SDL_SCALEMODE_LINEAR;
+		}
+
+		unsigned int to_gl_filter_value(TextureFilter filter) {
+			switch (filter) {
+				case TextureFilter::Nearest:
+					return GL_NEAREST_VALUE;
+				case TextureFilter::Linear:
+					return GL_LINEAR_VALUE;
+			}
+
+			return GL_LINEAR_VALUE;
+		}
 	}
 
 	struct Texture {
 		Backend backend{Backend::None};
 		unsigned int flags{TextureFlagNone};
+		TextureFilter filter{TextureFilter::Linear};
 		int width{0};
 		int height{0};
 		int pitch{0};
@@ -467,7 +491,11 @@ namespace ImGuiApp {
 		return backend;
 	}
 
-	Texture* CreateTexture(int width, int height, unsigned int flags) {
+	Texture* CreateTexture(int width, int height, TextureFilter filter) {
+		return CreateTexture(width, height, TextureFlagNone, filter);
+	}
+
+	Texture* CreateTexture(int width, int height, unsigned int flags, TextureFilter filter) {
 		if (width <= 0 || height <= 0 || width > std::numeric_limits<int>::max() / 4) {
 			SDL_Log("ImGuiApp::CreateTexture requires a positive RGBA texture size.");
 			return nullptr;
@@ -481,6 +509,7 @@ namespace ImGuiApp {
 		Texture* texture = new Texture{};
 		texture->backend = backend;
 		texture->flags = flags;
+		texture->filter = filter;
 		texture->width = width;
 		texture->height = height;
 		texture->pitch = width * 4;
@@ -500,7 +529,7 @@ namespace ImGuiApp {
 				}
 
 				SDL_SetTextureBlendMode(texture->sdl_texture, SDL_BLENDMODE_BLEND);
-				SDL_SetTextureScaleMode(texture->sdl_texture, SDL_SCALEMODE_LINEAR);
+				SDL_SetTextureScaleMode(texture->sdl_texture, to_sdl_scale_mode(filter));
 				if ((texture->flags & TextureFlagPreserveContents) != 0) {
 					texture->pixels.resize(static_cast<std::size_t>(texture->pitch) * static_cast<std::size_t>(height));
 					if (!SDL_UpdateTexture(texture->sdl_texture, nullptr, texture->pixels.data(), texture->pitch)) {
@@ -527,8 +556,9 @@ namespace ImGuiApp {
 				}
 
 				gl_texture_procs.BindTexture(GL_TEXTURE_2D_VALUE, texture->gl_texture);
-				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MIN_FILTER_VALUE, GL_LINEAR_VALUE);
-				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MAG_FILTER_VALUE, GL_LINEAR_VALUE);
+				const unsigned int gl_filter = to_gl_filter_value(filter);
+				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MIN_FILTER_VALUE, static_cast<int>(gl_filter));
+				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_MAG_FILTER_VALUE, static_cast<int>(gl_filter));
 				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_WRAP_S_VALUE, GL_CLAMP_TO_EDGE_VALUE);
 				gl_texture_procs.TexParameteri(GL_TEXTURE_2D_VALUE, GL_TEXTURE_WRAP_T_VALUE, GL_CLAMP_TO_EDGE_VALUE);
 				gl_texture_procs.PixelStorei(GL_UNPACK_ALIGNMENT_VALUE, 1);

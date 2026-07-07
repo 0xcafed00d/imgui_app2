@@ -6,7 +6,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::string text{"includes imgui_stdlib"};
-	ImGuiApp::Texture* texture = ImGuiApp::CreateTexture(128, 128, ImGuiApp::TextureFlagPreserveContents);
+	ImGuiApp::Texture* texture = ImGuiApp::CreateTexture(
+		128,
+		128,
+		ImGuiApp::TextureFlagPreserveContents,
+		ImGuiApp::TextureFilter::Nearest);
 	bool texture_ready = false;
 
 	if (texture != nullptr) {

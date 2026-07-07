@@ -107,7 +107,8 @@ The renderer is `nullptr` when the OpenGL backend is active. The GL context is `
 ImGuiApp::Texture* texture = ImGuiApp::CreateTexture(
 	128,
 	128,
-	ImGuiApp::TextureFlagPreserveContents);
+	ImGuiApp::TextureFlagPreserveContents,
+	ImGuiApp::TextureFilter::Nearest);
 
 void* pixels = nullptr;
 int pitch = 0;
@@ -146,12 +147,24 @@ enum TextureFlags : unsigned int {
 	TextureFlagPreserveContents = 1u << 0,
 };
 
-Texture* CreateTexture(int width, int height, unsigned int flags = TextureFlagNone);
+enum class TextureFilter {
+	Nearest,
+	Linear,
+};
+
+Texture* CreateTexture(
+	int width,
+	int height,
+	unsigned int flags = TextureFlagNone,
+	TextureFilter filter = TextureFilter::Linear);
+Texture* CreateTexture(int width, int height, TextureFilter filter);
 bool LockTexture(Texture* texture, void** pixels, int* pitch);
 void UnlockTexture(Texture* texture);
 void FreeTexture(Texture* texture);
 ImTextureID GetTextureID(const Texture* texture);
 ```
+
+Texture filtering defaults to `TextureFilter::Linear`. Use `TextureFilter::Nearest` for pixel art, checkerboards, or other textures that should stay sharp when scaled. The filter is applied through `SDL_SetTextureScaleMode()` on the SDLRenderer backend and `GL_TEXTURE_MIN_FILTER`/`GL_TEXTURE_MAG_FILTER` on the OpenGL backend.
 
 For the SDLRenderer backend, the default lock path uses SDL's streaming texture lock and should be treated as write-only. Pass `TextureFlagPreserveContents` when you want lock/unlock to preserve pixels between edits. That flag makes `ImGuiApp` keep a CPU staging buffer and upload it on `UnlockTexture()`.
 

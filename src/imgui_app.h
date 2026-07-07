@@ -14,6 +14,11 @@ namespace ImGuiApp {
 		TextureFlagPreserveContents = 1u << 0,
 	};
 
+	enum class TextureFilter {
+		Nearest,
+		Linear,
+	};
+
 	enum class Backend {
 		None,
 		SDLRenderer,
@@ -30,7 +35,8 @@ namespace ImGuiApp {
 	void Shutdown();
 	Backend GetBackend();
 
-	Texture* CreateTexture(int width, int height, unsigned int flags = TextureFlagNone);
+	Texture* CreateTexture(int width, int height, unsigned int flags = TextureFlagNone, TextureFilter filter = TextureFilter::Linear);
+	Texture* CreateTexture(int width, int height, TextureFilter filter);
 	bool LockTexture(Texture* texture, void** pixels, int* pitch);
 	void UnlockTexture(Texture* texture);
 	void FreeTexture(Texture* texture);
