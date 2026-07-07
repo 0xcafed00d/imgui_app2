@@ -1,51 +1,58 @@
 ## IMGUI_APP
 
-Packaging Dear::imgui and SDL 3 into a complete statically linked library to build multi platform GUI apps, with no external dependencies.
-Uses SDL renderer to render output so is not dependent on OpenGL, Vulkan, or Direct3d. (although SDL itself may use these)
+`imgui_app` packages Dear ImGui and SDL 3 into a small static library for building GUI applications. The default path uses SDL's renderer backend, and the library can also run Dear ImGui on an SDL-owned OpenGL context. Optional Raylib support builds on that OpenGL path so Raylib drawing commands can render into an ImGui UI.
 
-## Usage: 
+The project requires CMake 3.25 or newer.
 
-Use `FetchContent` to include lib in your project:
- 
+## Including The Library
+
+Use `FetchContent` to include the library in your project:
+
 ```cmake
 include(FetchContent)
+
 FetchContent_Declare(
 	imgui_app
-    GIT_REPOSITORY "https://github.com/0xcafed00d/imgui_app.git"
-    GIT_TAG main
-    GIT_PROGRESS TRUE
+	GIT_REPOSITORY "https://github.com/0xcafed00d/imgui_app.git"
+	GIT_TAG main
+	GIT_PROGRESS TRUE
 )
+
 FetchContent_MakeAvailable(imgui_app)
 ```
 
-Build your application as usual with CMAKE;
+Link the core app library when you only need Dear ImGui with SDL:
+
 ```cmake
 add_executable(my_app src/main.cpp)
 
-target_link_libraries(my_app 
-  PRIVATE
-  imgui_app)
+target_link_libraries(my_app
+	PRIVATE
+	imgui_app::imgui_app)
 ```
 
-You can overide the location and version of SDL3 that is fetched by setting the variables `SDL_URL` and `SDL_TAG` in your CMakeLists.txt before you call FetchContent: 
+You can override the fetched SDL and Dear ImGui sources before `FetchContent_MakeAvailable(imgui_app)`:
+
 ```cmake
 set(SDL_URL "https://github.com/libsdl-org/SDL.git")
 set(SDL_TAG "release-3.4.8")
-```
 
-You can also overide the location and version of Dear::imgui that is fetched by setting the variables `IMGUI_URL` and `IMGUI_TAG` in your CMakeLists.txt before you call FetchContent: 
-```cmake
 set(IMGUI_URL "https://github.com/ocornut/imgui.git")
 set(IMGUI_TAG "v1.92.7")
 ```
 
-The basic SDLRenderer-backed API is `Init`, `Loop`, `RequestQuit`, and `Shutdown`:
- 
+## Basic App
+
+`ImGuiApp::Init()` creates an SDL window and SDL renderer, then initializes Dear ImGui with the SDLRenderer backend. The render loop is driven by `ImGuiApp::Loop()`, and returns `false` when the app should exit.
+
 ```cpp
 #include "imgui_app.h"
 
 int main(int argc, char* argv[]) {
-	if (!ImGuiApp::Init("Sample Imgui Application", 1024, 768)) {
+	(void)argc;
+	(void)argv;
+
+	if (!ImGuiApp::Init("Sample ImGui Application", 1024, 768)) {
 		return -1;
 	}
 
@@ -62,32 +69,57 @@ int main(int argc, char* argv[]) {
 	}
 
 	ImGuiApp::Shutdown();
+	return 0;
 }
 ```
 
-There are also helper functions:
+## Backends
+
+The core library supports two Dear ImGui renderer backends:
+
 ```cpp
-GetSDLWindowAndRenderer(SDL_Window** window, SDL_Renderer** renderer);
-GetSDLWindowAndGLContext(SDL_Window** window, SDL_GLContext* gl_context);
+bool Init(const char* title, int width, int height);
+bool InitSDLRenderer(const char* title, int width, int height);
+bool InitOpenGL(const char* title, int width, int height, const char* glsl_version = nullptr);
+bool AttachSDLRenderer(SDL_Window* window, SDL_Renderer* renderer);
+bool AttachOpenGL(SDL_Window* window, SDL_GLContext gl_context, const char* glsl_version = nullptr);
+Backend GetBackend();
 ```
-These return the SDL objects currently being used by the ImGuiApp. The renderer will be `nullptr` when the OpenGL backend is active, and the GL context will be `nullptr` when the SDLRenderer backend is active.
 
-## ImGui textures
+`Init()` is the same as `InitSDLRenderer()`. Use `InitOpenGL()` when your application wants `ImGuiApp` to create the SDL window and OpenGL context. Use `AttachSDLRenderer()` or `AttachOpenGL()` when another system already owns the SDL objects.
 
-`ImGuiApp` can create RGBA8 textures for the active backend. With the SDLRenderer backend this wraps an `SDL_Texture`; pass `TextureFlagPreserveContents` when you want locks to return a persistent CPU staging buffer. With the OpenGL backend this wraps a GL texture and always uses a CPU staging buffer while locked, so that flag has no extra effect there.
+Objects passed to `AttachSDLRenderer()` or `AttachOpenGL()` are borrowed. `ImGuiApp::Shutdown()` shuts down ImGui backends but does not destroy borrowed SDL windows, renderers, GL contexts, or SDL itself.
+
+You can retrieve the active native objects when you need to integrate with other SDL or OpenGL code:
 
 ```cpp
-ImGuiApp::Texture* texture = ImGuiApp::CreateTexture(128, 128, ImGuiApp::TextureFlagPreserveContents);
+void GetSDLWindowAndRenderer(SDL_Window** window, SDL_Renderer** renderer);
+void GetSDLWindowAndGLContext(SDL_Window** window, SDL_GLContext* gl_context);
+```
+
+The renderer is `nullptr` when the OpenGL backend is active. The GL context is `nullptr` when the SDLRenderer backend is active.
+
+## ImGui Textures
+
+`ImGuiApp` can create RGBA8 textures for the active backend and return the correct `ImTextureID` for `ImGui::Image()`.
+
+```cpp
+ImGuiApp::Texture* texture = ImGuiApp::CreateTexture(
+	128,
+	128,
+	ImGuiApp::TextureFlagPreserveContents);
 
 void* pixels = nullptr;
 int pitch = 0;
+
 if (texture != nullptr && ImGuiApp::LockTexture(texture, &pixels, &pitch)) {
 	for (int y = 0; y < 128; ++y) {
 		unsigned char* row = static_cast<unsigned char*>(pixels) + y * pitch;
 		for (int x = 0; x < 128; ++x) {
-			row[x * 4 + 0] = 255;
-			row[x * 4 + 1] = 128;
-			row[x * 4 + 2] = 32;
+			const bool light = ((x / 16) + (y / 16)) % 2 == 0;
+			row[x * 4 + 0] = light ? 240 : 60;
+			row[x * 4 + 1] = light ? 160 : 90;
+			row[x * 4 + 2] = light ? 70 : 160;
 			row[x * 4 + 3] = 255;
 		}
 	}
@@ -97,7 +129,7 @@ if (texture != nullptr && ImGuiApp::LockTexture(texture, &pixels, &pitch)) {
 while (ImGuiApp::Loop()) {
 	ImGui::Begin("Texture");
 	if (texture != nullptr) {
-		ImGui::Image(ImGuiApp::GetTextureID(texture), ImVec2(128, 128));
+		ImGui::Image(ImGuiApp::GetTextureID(texture), ImVec2(128.0f, 128.0f));
 	}
 	ImGui::End();
 }
@@ -106,30 +138,30 @@ ImGuiApp::FreeTexture(texture);
 ImGuiApp::Shutdown();
 ```
 
-Call `FreeTexture()` before `Shutdown()` so the native texture is released while the renderer or OpenGL context is still alive.
-
-If your application or another library already owns an SDL window and OpenGL context, attach ImGui to those instead of letting `imgui_app` create its own SDLRenderer:
+Texture API:
 
 ```cpp
-SDL_Window* window = /* created elsewhere */;
-SDL_GLContext gl_context = /* created elsewhere */;
+enum TextureFlags : unsigned int {
+	TextureFlagNone = 0,
+	TextureFlagPreserveContents = 1u << 0,
+};
 
-if (!ImGuiApp::AttachOpenGL(window, gl_context, "#version 330")) {
-	return -1;
-}
-
-while (ImGuiApp::Loop()) {
-	ImGui::ShowDemoWindow();
-}
-
-ImGuiApp::Shutdown();
+Texture* CreateTexture(int width, int height, unsigned int flags = TextureFlagNone);
+bool LockTexture(Texture* texture, void** pixels, int* pitch);
+void UnlockTexture(Texture* texture);
+void FreeTexture(Texture* texture);
+ImTextureID GetTextureID(const Texture* texture);
 ```
 
-Objects passed to `AttachSDLRenderer()` or `AttachOpenGL()` are borrowed. `ImGuiApp::Shutdown()` shuts down ImGui backends but does not destroy the supplied SDL window, renderer, GL context, or SDL itself.
+For the SDLRenderer backend, the default lock path uses SDL's streaming texture lock and should be treated as write-only. Pass `TextureFlagPreserveContents` when you want lock/unlock to preserve pixels between edits. That flag makes `ImGuiApp` keep a CPU staging buffer and upload it on `UnlockTexture()`.
 
-## Optional Raylib support
+For the OpenGL backend, textures always use a CPU staging buffer and upload to the GL texture on `UnlockTexture()`. `TextureFlagPreserveContents` has no additional effect there.
 
-Enable Raylib support before including this library. By default this fetches [raysan5/raylib](https://github.com/raysan5/raylib) and sets Raylib's `PLATFORM` option to `SDL` so Raylib uses its SDL backend.
+Call `FreeTexture()` before `Shutdown()` so the native texture is released while the SDL renderer or OpenGL context is still alive.
+
+## Optional Raylib Support
+
+Enable Raylib support before including this library:
 
 ```cmake
 include(FetchContent)
@@ -142,14 +174,17 @@ FetchContent_Declare(
 	GIT_TAG main
 	GIT_PROGRESS TRUE
 )
+
 FetchContent_MakeAvailable(imgui_app)
 
 add_executable(my_app src/main.cpp)
 
 target_link_libraries(my_app
 	PRIVATE
-	imgui_raylib)
+	imgui_app::imgui_raylib)
 ```
+
+By default, this fetches [raysan5/raylib](https://github.com/raysan5/raylib) and sets Raylib's `PLATFORM` option to `SDL`, so Raylib creates an SDL window and OpenGL context that ImGui can attach to.
 
 You can override the Raylib source, version, or platform before `FetchContent_MakeAvailable(imgui_app)`:
 
@@ -159,29 +194,22 @@ set(RAYLIB_TAG "6.0")
 set(RAYLIB_PLATFORM "SDL")
 ```
 
-If your application already provides a `raylib` target, `imgui_raylib` will link to it. Set `IMGUI_APP_FETCH_RAYLIB` to `OFF` when you want this library to call `find_package(raylib CONFIG REQUIRED)` instead of downloading Raylib.
+If your application already provides a `raylib` target, `imgui_raylib` links to it. Set `IMGUI_APP_FETCH_RAYLIB` to `OFF` when you want this library to call `find_package(raylib CONFIG REQUIRED)` instead of fetching Raylib.
 
-## Raylib inside ImGui
+## Raylib Inside ImGui
 
-Link `imgui_raylib` when you want to use Raylib drawing commands inside an ImGui UI. Raylib creates the SDL window and OpenGL context first, then ImGui attaches to those borrowed objects. `BeginRaylib()` renders to a Raylib `RenderTexture2D` and displays the OpenGL texture directly with `ImGui::Image`.
+`ImGuiRaylib::Init()` initializes Raylib first, then attaches `ImGuiApp` to Raylib's SDL window and OpenGL context. The application render loop is still controlled by `ImGuiApp::Loop()`.
 
-```cmake
-set(IMGUI_APP_ENABLE_RAYLIB ON)
-
-add_executable(my_app src/main.cpp)
-
-target_link_libraries(my_app
-	PRIVATE
-	imgui_raylib)
-```
-
-Use `BeginRaylib()` and `EndRaylib()` inside any ImGui window:
+Use `BeginRaylib()` and `EndRaylib()` inside any ImGui window. Raylib commands between them render into a Raylib `RenderTexture2D`, and `EndRaylib()` displays that OpenGL texture with `ImGui::Image()`.
 
 ```cpp
 #include "imgui_app.h"
 #include "imgui_raylib.h"
 
 int main(int argc, char* argv[]) {
+	(void)argc;
+	(void)argv;
+
 	if (!ImGuiRaylib::Init("ImGui + Raylib", 1024, 768)) {
 		return -1;
 	}
@@ -192,16 +220,35 @@ int main(int argc, char* argv[]) {
 		if (ImGuiRaylib::BeginRaylib("scene", ImVec2(640, 360), ImColor(28, 32, 42, 255))) {
 			DrawText("Hello from Raylib", 24, 24, 24, RAYWHITE);
 			DrawCircle(320, 180, 48, SKYBLUE);
+
+			const ImVec2 texture_size = ImGuiRaylib::GetCurrentSize();
 			ImGuiRaylib::EndRaylib();
+
+			if (ImGui::IsItemHovered()) {
+				const ImVec2 item_min = ImGui::GetItemRectMin();
+				const ImVec2 item_size = ImGui::GetItemRectSize();
+				const ImVec2 mouse = ImGui::GetMousePos();
+				const float u = (mouse.x - item_min.x) / item_size.x;
+				const float v = (mouse.y - item_min.y) / item_size.y;
+				ImGui::SetTooltip(
+					"texture: %.0f, %.0f\nuv: %.3f, %.3f",
+					u * texture_size.x,
+					v * texture_size.y,
+					u,
+					v);
+			}
 		}
 
 		ImGui::End();
 	}
 
 	ImGuiRaylib::Shutdown();
+	return 0;
 }
 ```
 
-Call `ImGuiRaylib::Shutdown()` at the end of the application. It releases Raylib render targets, shuts down ImGui, and closes the Raylib window in the correct order.
+`GetCurrentSize()` returns the current Raylib render texture size while a Raylib canvas is active. After `EndRaylib()`, the rendered image is the last ImGui item, so standard ImGui item APIs such as `IsItemHovered()`, `GetItemRectMin()`, and `GetItemRectSize()` can be used to map mouse position back to texture coordinates.
+
+Call `ImGuiRaylib::Shutdown()` at the end of the application. It releases Raylib render targets, shuts down ImGui through `ImGuiApp::Shutdown()`, and closes the Raylib window in the correct order.
 
 `imgui_raylib` requires the OpenGL backend. Use `ImGuiRaylib::Init()` for Raylib integration; `ImGuiApp::Init()` remains the SDLRenderer-backed path for ImGui-only applications.
