@@ -99,6 +99,71 @@ void GetSDLWindowAndGLContext(SDL_Window** window, SDL_GLContext* gl_context);
 
 The renderer is `nullptr` when the OpenGL backend is active. The GL context is `nullptr` when the SDLRenderer backend is active.
 
+## File Dialogs
+
+`ImGuiApp` provides small wrappers around SDL3's native file dialogs. The easy path uses synchronous-looking calls that block until SDL's asynchronous callback has returned. While waiting, these functions pump SDL events so platform dialog backends can continue to make progress.
+
+```cpp
+const ImGuiApp::FileDialogFilter filters[] = {
+	{"Text files", "txt;md"},
+	{"All files", "*"},
+};
+
+ImGuiApp::FileDialogResult result = ImGuiApp::OpenFileDialog(filters, 2);
+if (result.accepted) {
+	std::string path = result.paths.front();
+} else if (result.error) {
+	std::string message = result.error_message;
+}
+```
+
+File dialog API:
+
+```cpp
+using FileDialogCallback = SDL_DialogFileCallback;
+using FileDialogFilter = SDL_DialogFileFilter;
+
+struct FileDialogResult {
+	bool completed;
+	bool accepted;
+	bool canceled;
+	bool error;
+	int filter;
+	std::vector<std::string> paths;
+	std::string error_message;
+};
+
+FileDialogResult OpenFileDialog(
+	const FileDialogFilter* filters = nullptr,
+	int nfilters = 0,
+	const char* default_location = nullptr,
+	bool allow_many = false);
+
+FileDialogResult SaveFileDialog(
+	const FileDialogFilter* filters = nullptr,
+	int nfilters = 0,
+	const char* default_location = nullptr);
+
+bool ShowOpenFileDialog(
+	FileDialogCallback callback,
+	void* userdata = nullptr,
+	const FileDialogFilter* filters = nullptr,
+	int nfilters = 0,
+	const char* default_location = nullptr,
+	bool allow_many = false);
+
+bool ShowSaveFileDialog(
+	FileDialogCallback callback,
+	void* userdata = nullptr,
+	const FileDialogFilter* filters = nullptr,
+	int nfilters = 0,
+	const char* default_location = nullptr);
+```
+
+`OpenFileDialog()` and `SaveFileDialog()` are intended for simple button-driven file choices where pausing the UI is acceptable. Use `ShowOpenFileDialog()` and `ShowSaveFileDialog()` when you need the lower-level asynchronous SDL behavior.
+
+SDL may invoke asynchronous callbacks on a different thread. Do not call ImGui APIs directly from those callbacks unless you marshal the result back to the main thread. SDL owns the callback `filelist` strings and frees them when the callback returns, so copy any selected paths you need to keep. Any filter array passed to an asynchronous dialog must remain valid until the callback runs.
+
 ## ImGui Textures
 
 `ImGuiApp` can create RGBA8 textures for the active backend and return the correct `ImTextureID` for `ImGui::Image()`.

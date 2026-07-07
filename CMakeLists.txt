@@ -112,6 +112,8 @@ add_library(
 	STATIC
 	src/imgui_app.h
 	src/imgui_app.cpp
+	src/imgui_app_dialogs.cpp
+	src/imgui_app_textures.cpp
 )
 
 add_library(imgui_app::imgui_app ALIAS imgui_app)
